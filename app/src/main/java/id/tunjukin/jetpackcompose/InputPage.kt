@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -27,6 +28,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 //import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -44,10 +46,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.orhanobut.hawk.Hawk
 
 class InputPage: AppCompatActivity() {
-
+    var initialized:Boolean = false;
     override fun onCreate(savedInstanceState: Bundle?) {
+
         super.onCreate(savedInstanceState)
         setContent {
             MainLayout()
@@ -56,22 +60,123 @@ class InputPage: AppCompatActivity() {
 
     @Composable
     fun MainLayout(){
-        var items = remember { mutableStateListOf<ItemPoint>() }
+        val openLoad = remember { mutableStateOf(false) }
+        val openSave = remember { mutableStateOf(false) }
+        var items = remember { mutableStateListOf<InputModel.ItemPoint>() }
+        if(!initialized){
+            initialized = true;
+            var savedItems = loadItems();
+            for(item in savedItems){
+                items.add(item)
+            }
+        }
         LaunchedEffect(items.toList()) {
             println("List was changed.")
         }
-        Column (Modifier.background(color = Color.White).fillMaxWidth().fillMaxHeight().padding(all = 10.dp)){
+        Column (Modifier
+            .background(color = Color.White)
+            .fillMaxWidth()
+            .fillMaxHeight()
+            .padding(all = 10.dp)){
             Title()
             Box(modifier= Modifier.height(10.dp))
             InputItem(items)
-            LazyColumn (state = rememberLazyListState(), reverseLayout = true){
+            LazyColumn (state = rememberLazyListState(), reverseLayout = false, modifier = Modifier.weight(1f)){
                 items(count = items.size,
 //                    key={ index->items[index].id }
                 ){ index ->
                     Item( items[index],items,index)
                 }
             }
+            Footer(openLoad,openSave)
+            when {
+                openLoad.value -> {
+                    showLoadFromServer(openLoad)
+                }
+
+                openSave.value -> {
+                    showSaveFromServer(openSave)
+                }
+            }
         }
+    }
+
+    @Composable
+    fun Footer(openLoad : MutableState<Boolean>,openSave : MutableState<Boolean>){
+        Row {
+            Button(onClick = {
+                openSave.value = true
+            },modifier = Modifier.weight(1f)){
+                Text("Save to Server")
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Button(onClick = {
+                openLoad.value = true
+            },modifier = Modifier.weight(1f)){
+                Text("Load from Server")
+            }
+        }
+    }
+
+    @Composable
+    fun showLoadFromServer(ms:MutableState<Boolean>){
+        var inputName by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { /*TODO*/ },
+            title = { Text(text = "Load from Server") },
+            text = {
+                Column{
+                    Text(text = "Please input saved name.")
+                    TextField(value = inputName, onValueChange = {
+                        inputName = it
+                    } )
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    ms.value = false
+                }) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                Button(onClick = {
+                    ms.value = false
+                }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+    @Composable
+    fun showSaveFromServer(ms:MutableState<Boolean>){
+        var inputName by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { /*TODO*/ },
+            title = { Text(text = "Save to Server") },
+            text = {
+                Column{
+                    Text(text = "Please input saved name.")
+                    TextField(value = inputName, onValueChange = {
+                        inputName = it
+                    } )
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    ms.value = false
+                }) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                Button(onClick = {
+                    ms.value = false
+                }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     @Preview
@@ -82,12 +187,14 @@ class InputPage: AppCompatActivity() {
             fontWeight = FontWeight.W500,
             color = androidx.compose.ui.graphics.Color.DarkGray,
             fontSize = 30.sp
-        ), modifier = Modifier.fillMaxWidth().background(color = Color.White)
+        ), modifier = Modifier
+            .fillMaxWidth()
+            .background(color = Color.White)
         )
     }
 
     @Composable
-    fun InputItem(items: MutableList<ItemPoint>){
+    fun InputItem(items: MutableList<InputModel.ItemPoint>){
         var inputText by remember { mutableStateOf("") }
         Row(Modifier.fillMaxWidth()){
             TextField(value = inputText, onValueChange = {
@@ -95,45 +202,75 @@ class InputPage: AppCompatActivity() {
             }, modifier = Modifier.weight(1f))
             Spacer(modifier = Modifier.width(10.dp))
             Button(onClick = {
-                items.add(ItemPoint(name = inputText, id = System.currentTimeMillis()))
+                items.add(InputModel.ItemPoint(name = inputText, id = System.currentTimeMillis()))
                 inputText = ""
+                changeItems(items)
             }) {
                 Text(text = "Save", style = TextStyle(color = Color.White),)
             }
         }
     }
     @Composable
-    fun Item(itemPoint: ItemPoint, items: MutableList<ItemPoint>, index:Int ) {
+    fun Item(itemPoint: InputModel.ItemPoint, items: MutableList<InputModel.ItemPoint>, index:Int ) {
         var checkColor = Color.Gray
         var decoration = TextDecoration.None
         if (itemPoint.checked) {
             checkColor = Color.Green
             decoration = TextDecoration.LineThrough
         }
-        Column(Modifier.fillMaxWidth().padding(top = 5.dp, bottom = 5.dp)){
+        Column(Modifier
+            .fillMaxWidth()
+            .padding(top = 5.dp, bottom = 5.dp)){
             Row(Modifier.padding(top = 5.dp, bottom = 5.dp)){
                 TextButton(onClick = {
                     itemPoint.checked = !itemPoint.checked
-                    items[index]= ItemPoint(id = itemPoint.id, name = itemPoint.name, checked = itemPoint.checked)
-                }, modifier = Modifier.width(50.dp).height(50.dp).padding(all = 0.dp)){
-                    Icon(Icons.Rounded.CheckCircle, tint = checkColor, contentDescription = "Checklist", modifier = Modifier.padding(all = 0.dp).width(50.dp).height(50.dp))
+                    items[index]= InputModel.ItemPoint(
+                        id = itemPoint.id,
+                        name = itemPoint.name,
+                        checked = itemPoint.checked
+                    )
+                    changeItems(items)
+                }, modifier = Modifier
+                    .width(50.dp)
+                    .height(50.dp)
+                    .padding(all = 0.dp)){
+                    Icon(Icons.Rounded.CheckCircle, tint = checkColor, contentDescription = "Checklist", modifier = Modifier
+                        .padding(all = 0.dp)
+                        .width(50.dp)
+                        .height(50.dp))
                 }
                 Spacer(modifier = Modifier.width(5.dp))
-                Text(itemPoint.name,overflow = TextOverflow.Ellipsis, maxLines = 2, textAlign = TextAlign.Left, modifier = Modifier.height(50.dp).weight(1f).wrapContentHeight(align = Alignment.CenterVertically).background(color = Color.Transparent), style= TextStyle(color = Color.Black, textDecoration = decoration),)
+                Text(itemPoint.name,overflow = TextOverflow.Ellipsis, maxLines = 2, textAlign = TextAlign.Left, modifier = Modifier
+                    .height(50.dp)
+                    .weight(1f)
+                    .wrapContentHeight(align = Alignment.CenterVertically)
+                    .background(color = Color.Transparent), style= TextStyle(color = Color.Black, textDecoration = decoration),)
                 TextButton(onClick = {
                     items.remove(itemPoint)
-                }, modifier = Modifier.width(50.dp).height(50.dp).padding(all = 0.dp)){
-                    Icon(Icons.Rounded.Delete, tint = Color.Red, contentDescription = "delete", modifier = Modifier.padding(all = 0.dp).width(50.dp).height(50.dp))
+                    changeItems(items)
+                }, modifier = Modifier
+                    .width(50.dp)
+                    .height(50.dp)
+                    .padding(all = 0.dp)){
+                    Icon(Icons.Rounded.Delete, tint = Color.Red, contentDescription = "delete", modifier = Modifier
+                        .padding(all = 0.dp)
+                        .width(50.dp)
+                        .height(50.dp))
                 }
             }
             HorizontalDivider(thickness = (0.7).dp)
         }
     }
+    private fun changeItems(items: MutableList<InputModel.ItemPoint>){
+        Hawk.put("items",InputModel(items = items))
+    }
+    private fun loadItems():MutableList<InputModel.ItemPoint>{
+        var default = mutableListOf<InputModel.ItemPoint>()
+        var iModel = Hawk.get<InputModel>("items")
+        if(iModel!=null){
+            return iModel.items;
+        }
+        return default
+    }
 }
 
-class ItemPoint(
-    var id: Long = 0,
-    var name: String,
-    var checked: Boolean = false
-) {
-}
