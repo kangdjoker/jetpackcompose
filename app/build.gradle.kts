@@ -67,5 +67,6 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
     implementation(libs.hawk)
     implementation(libs.volley)
+    implementation(libs.gson)
 
 }

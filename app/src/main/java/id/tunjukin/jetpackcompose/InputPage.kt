@@ -1,5 +1,6 @@
 package id.tunjukin.jetpackcompose
 
+//import androidx.compose.runtime.getValue
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
@@ -30,7 +31,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
-//import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,13 +46,25 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.android.volley.NetworkResponse
+import com.android.volley.Request
+import com.android.volley.RequestQueue
+import com.android.volley.Response
+import com.android.volley.VolleyLog
+import com.android.volley.toolbox.HttpHeaderParser
+import com.android.volley.toolbox.StringRequest
+import com.android.volley.toolbox.Volley
 import com.orhanobut.hawk.Hawk
+import java.io.UnsupportedEncodingException
+import com.google.gson.Gson
 
 class InputPage: AppCompatActivity() {
     var initialized:Boolean = false;
+    lateinit var queue :RequestQueue
     override fun onCreate(savedInstanceState: Bundle?) {
 
         super.onCreate(savedInstanceState)
+        queue = Volley.newRequestQueue(this)
         setContent {
             MainLayout()
         }
@@ -82,7 +94,8 @@ class InputPage: AppCompatActivity() {
             Box(modifier= Modifier.height(10.dp))
             InputItem(items)
             LazyColumn (state = rememberLazyListState(), reverseLayout = false, modifier = Modifier.weight(1f)){
-                items(count = items.size,
+                items(
+                    count = items.size,
 //                    key={ index->items[index].id }
                 ){ index ->
                     Item( items[index],items,index)
@@ -91,11 +104,11 @@ class InputPage: AppCompatActivity() {
             Footer(openLoad,openSave)
             when {
                 openLoad.value -> {
-                    showLoadFromServer(openLoad)
+                    showLoadFromServer(openLoad,items)
                 }
 
                 openSave.value -> {
-                    showSaveFromServer(openSave)
+                    showSaveFromServer(openSave,items)
                 }
             }
         }
@@ -119,7 +132,7 @@ class InputPage: AppCompatActivity() {
     }
 
     @Composable
-    fun showLoadFromServer(ms:MutableState<Boolean>){
+    fun showLoadFromServer(ms:MutableState<Boolean>,items: MutableList<InputModel.ItemPoint>){
         var inputName by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { /*TODO*/ },
@@ -134,7 +147,8 @@ class InputPage: AppCompatActivity() {
             },
             confirmButton = {
                 Button(onClick = {
-                    ms.value = false
+//                    ms.value = false
+                    loadData(inputName, items, ms)
                 }) {
                     Text("OK")
                 }
@@ -148,8 +162,109 @@ class InputPage: AppCompatActivity() {
             }
         )
     }
+
+    fun saveData(name:String, items:MutableList<InputModel.ItemPoint>,ms:MutableState<Boolean>) {
+        println("Saving data to server with name: $name")
+        val requestBody = Gson().toJson(APIModel(name,InputModel(items = items)))
+        println("Request body: $requestBody")
+        val sr =  object : StringRequest(Request.Method.POST, "https://genmid.tunjukin.id/genmid-central/simple/keyvalue/set",
+            Response.Listener<String> { response ->
+                ms.value = false
+                println("SAVE SUccess")
+            },
+            Response.ErrorListener {
+                ms.value = false
+                println("SAVE Failed: ${it.message}")
+            }){
+            override fun getBodyContentType(): String {
+                return "application/json; charset=utf-8"
+            }
+
+            override fun getBody(): ByteArray {
+                try {
+                    return requestBody.toByteArray(charset("utf-8"))
+                } catch (uee: UnsupportedEncodingException) {
+                    VolleyLog.wtf(
+                        "Unsupported Encoding while trying to get the bytes of %s using %s",
+                        requestBody,
+                        "utf-8"
+                    )
+                    return ByteArray(0)
+                }
+            }
+
+            override fun parseNetworkResponse(response: NetworkResponse?): Response<String> {
+                var responseString = ""
+                if (response != null) {
+                    responseString = java.lang.String.valueOf(response.statusCode)
+                }
+                return Response.success(
+                    responseString,
+                    HttpHeaderParser.parseCacheHeaders(response)
+                )
+            }
+        }
+        queue.add(sr)
+    }
+    fun loadData(name:String, items:MutableList<InputModel.ItemPoint>,ms:MutableState<Boolean>) {
+        println("Saving data to server with name: $name")
+        val requestBody = Gson().toJson(APIModel(name,InputModel(items = items)))
+        println("Request body: $requestBody")
+        val sr =  object : StringRequest(Request.Method.POST, "https://genmid.tunjukin.id/genmid-central/simple/keyvalue/get",
+            Response.Listener<String> { response ->
+                println("Response: $response")
+                val apiResponseModel = Gson().fromJson(response, APIResponseModel::class.java)
+                items.clear()
+                if(apiResponseModel.data!=null && apiResponseModel.data!!.value!=null) {
+                    for( item in apiResponseModel.data!!.value!!.items){
+                        items.add(InputModel.ItemPoint(
+                            id = item.id,
+                            name = item.name,
+                            checked = item.checked
+                        ))
+                    }
+                }
+                changeItems(items)
+                ms.value = false
+                println("LOAD SUccess")
+            },
+            Response.ErrorListener {
+                ms.value = false
+                println("LOAD Failed: ${it.message}")
+            }){
+            override fun getBodyContentType(): String {
+                return "application/json; charset=utf-8"
+            }
+
+            override fun getBody(): ByteArray {
+                try {
+                    return requestBody.toByteArray(charset("utf-8"))
+                } catch (uee: UnsupportedEncodingException) {
+                    VolleyLog.wtf(
+                        "Unsupported Encoding while trying to get the bytes of %s using %s",
+                        requestBody,
+                        "utf-8"
+                    )
+                    return ByteArray(0)
+                }
+            }
+
+//            override fun parseNetworkResponse(response: NetworkResponse?): Response<String> {
+//                var responseString = ""
+//                if (response != null) {
+//                    responseString = java.lang.String.valueOf(response.data)
+//                }
+//                return Response.success(
+//                    responseString,
+//                    HttpHeaderParser.parseCacheHeaders(response)
+//                )
+//            }
+        }
+        queue.add(sr)
+    }
+
     @Composable
-    fun showSaveFromServer(ms:MutableState<Boolean>){
+    fun showSaveFromServer(ms:MutableState<Boolean>,items: MutableList<InputModel.ItemPoint>){
         var inputName by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { /*TODO*/ },
@@ -164,7 +279,7 @@ class InputPage: AppCompatActivity() {
             },
             confirmButton = {
                 Button(onClick = {
-                    ms.value = false
+                    saveData(inputName, items, ms)
                 }) {
                     Text("OK")
                 }
@@ -206,7 +321,7 @@ class InputPage: AppCompatActivity() {
                 inputText = ""
                 changeItems(items)
             }) {
-                Text(text = "Save", style = TextStyle(color = Color.White),)
+                Text(text = "Save", style = TextStyle(color = Color.White))
             }
         }
     }
@@ -240,11 +355,18 @@ class InputPage: AppCompatActivity() {
                         .height(50.dp))
                 }
                 Spacer(modifier = Modifier.width(5.dp))
-                Text(itemPoint.name,overflow = TextOverflow.Ellipsis, maxLines = 2, textAlign = TextAlign.Left, modifier = Modifier
-                    .height(50.dp)
-                    .weight(1f)
-                    .wrapContentHeight(align = Alignment.CenterVertically)
-                    .background(color = Color.Transparent), style= TextStyle(color = Color.Black, textDecoration = decoration),)
+                Text(
+                    itemPoint.name,
+                    overflow = TextOverflow.Ellipsis,
+                    maxLines = 2,
+                    textAlign = TextAlign.Left,
+                    modifier = Modifier
+                        .height(50.dp)
+                        .weight(1f)
+                        .wrapContentHeight(align = Alignment.CenterVertically)
+                        .background(color = Color.Transparent),
+                    style = TextStyle(color = Color.Black, textDecoration = decoration),
+                )
                 TextButton(onClick = {
                     items.remove(itemPoint)
                     changeItems(items)
